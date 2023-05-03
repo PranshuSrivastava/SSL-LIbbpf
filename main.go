@@ -26,7 +26,7 @@ const (
 	write = "SSL_write"
 )
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS  bpf openssl_bpf_funcs.c -- -I./.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -no-global-types -target $TARGET bpf openssl_bpf_funcs.c -- -I./.
 
 func main() {
 	stopper := make(chan os.Signal, 1)

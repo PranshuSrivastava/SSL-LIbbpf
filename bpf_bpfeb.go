@@ -13,11 +13,6 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type bpfMyStruct struct {
-	Buf [8192]int8
-	Len uint64
-}
-
 type bpfSslDataEventT struct {
 	Type        uint32
 	TimestampNs int32
@@ -147,6 +142,5 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
-//
 //go:embed bpf_bpfeb.o
 var _BpfBytes []byte
