@@ -1,18 +1,18 @@
 #include <linux/types.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
+
 #include "vmlinux.h"
 #include "bpf_tracing.h"
 #include "tls_message.h"
 
-#define MAX_DATA_SIZE 8192
-
+#define MAX_DATA_SIZE 1000
+char _license[] SEC("license") = "GPL";
 //Struct for our tls message
 struct my_struct {
-    const char *buf;
-    size_t *len;
+    const char buf[MAX_DATA_SIZE];
+    size_t len;
 };
-
 
 //Declaring the perf submit event
 struct {
@@ -59,7 +59,6 @@ struct{
 //     .map_flags = 0,
 // };
 
-// BPF_HASH(active_ssl_read_args_map, u64, struct my_struct);
 // struct bpf_map_def SEC("maps") read_tls_map_data = {
 //     .type = BPF_MAP_TYPE_HASH,
 //     .key_size = sizeof(__u64),
@@ -92,7 +91,6 @@ struct{
     __uint(map_flags, 0);
 } read_tls_map_timestamp SEC(".maps");
 
-// BPF_HASH(active_ssl_read_args_map, u64, struct my_struct);
 // struct bpf_map_def SEC("maps") write_tls_map_data = {
 //     .type = BPF_MAP_TYPE_HASH,
 //     .key_size = sizeof(__u64),
@@ -182,14 +180,22 @@ int uprobe_entry_SSL_write(struct pt_regs* ctx) {
   u64 ts = bpf_ktime_get_ns();
   //Getting the address of the buffer
   struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
-  if (__ctx == NULL) {
+  if(__ctx == NULL) {
     return 0;
   }
-  //Reading the buffer
-  char* read_buf = (char*)PT_REGS_PARM2_CORE(__ctx);
-
+  //Access the percpu array for read_buf
+  u32 zeroPointer = 0;
+  char *read_buf = bpf_map_lookup_elem(&tls_data_array, &zeroPointer);
+  if(read_buf == NULL) {
+    return 0;
+  }
+  char *user_space_buf = (char *)PT_REGS_PARM2_CORE(__ctx);
+  if(bpf_probe_read(read_buf, MAX_DATA_SIZE, user_space_buf) < 0) {
+    bpf_printk("Failed to read buffer\n");
+    return 0;
+  }
   //Updating the buffer and the timestamp in the map
-  bpf_map_update_elem(&active_ssl_write_args_map, &processThreadID, &read_buf, 0);
+  bpf_map_update_elem(&write_tls_map_data, &processThreadID, &read_buf, 0);
   bpf_map_update_elem(&write_tls_map_timestamp, &processThreadID, &ts, 0);
 
   return 0;
@@ -215,11 +221,26 @@ SEC("uprobe/ssl_read")
 int uprobe_entry_SSL_read(struct pt_regs* ctx) {
   u64 processThreadID = bpf_get_current_pid_tgid();
   u64 ts = bpf_ktime_get_ns();
+   //Getting the address of the buffer
+  struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
+  if(__ctx == NULL) {
+    return 0;
+  }
 
-  const char* buffer = (const char*)PT_REGS_PARM2(ctx);
+//Access the percpu array for read_buf
+  u32 zeroPointer = 0;
+  char *read_buf = bpf_map_lookup_elem(&tls_data_array, &zeroPointer);
+  if(read_buf == NULL) {
+    return 0;
+  }
+  char *user_space_buf = (char *)PT_REGS_PARM2_CORE(__ctx);
+  if(bpf_probe_read(read_buf, MAX_DATA_SIZE, user_space_buf) < 0) {
+    bpf_printk("Failed to read buffer\n");
+    return 0;
+  }
   //update the tiumestamp and data
   bpf_map_update_elem(&read_tls_map_timestamp, &processThreadID, &ts, 0);
-  bpf_map_update_elem(&read_tls_map_data, &processThreadID, &buffer, 0);
+  bpf_map_update_elem(&read_tls_map_data, &processThreadID, &read_buf, 0);
   return 0;
 }
 
@@ -227,7 +248,6 @@ int uprobe_entry_SSL_read(struct pt_regs* ctx) {
 SEC("uretprobe/ssl_read")
 int uprobe_return_SSL_read(struct pt_regs* ctx) {
   u64 processThreadID = bpf_get_current_pid_tgid();
-
   //Looking up the buffer in the map
   const char** buffer = bpf_map_lookup_elem(&read_tls_map_data, &processThreadID);
   if (buffer != NULL) {
