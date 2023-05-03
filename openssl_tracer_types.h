@@ -17,7 +17,7 @@
  */
 
 #pragma once
-#include <stdint.h>
+
 
 #define MAX_DATA_SIZE 8192
 enum ssl_data_event_type { kSSLRead, kSSLWrite };

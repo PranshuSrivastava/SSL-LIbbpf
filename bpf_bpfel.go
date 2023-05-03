@@ -14,14 +14,17 @@ import (
 )
 
 type bpfMyStruct struct {
-	Buf [1000]int8
+	Buf [8192]int8
 	Len uint64
 }
 
-type bpfTLS_MESSAGE struct {
-	Elapsed int32
-	Ptid    int32
-	Message [8192]int8
+type bpfSslDataEventT struct {
+	Type        uint32
+	TimestampNs int32
+	Pid         uint32
+	Tid         int32
+	Data        [8192]int8
+	DataLen     int32
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -78,11 +81,7 @@ type bpfMapSpecs struct {
 	TLS_DATA_PERF_OUTPUT  *ebpf.MapSpec `ebpf:"TLS_DATA_PERF_OUTPUT"`
 	ActiveSslReadArgsMap  *ebpf.MapSpec `ebpf:"active_ssl_read_args_map"`
 	ActiveSslWriteArgsMap *ebpf.MapSpec `ebpf:"active_ssl_write_args_map"`
-	ReadTlsMapData        *ebpf.MapSpec `ebpf:"read_tls_map_data"`
-	ReadTlsMapTimestamp   *ebpf.MapSpec `ebpf:"read_tls_map_timestamp"`
-	TlsDataArray          *ebpf.MapSpec `ebpf:"tls_data_array"`
-	WriteTlsMapData       *ebpf.MapSpec `ebpf:"write_tls_map_data"`
-	WriteTlsMapTimestamp  *ebpf.MapSpec `ebpf:"write_tls_map_timestamp"`
+	DataBufferHeap        *ebpf.MapSpec `ebpf:"data_buffer_heap"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -107,11 +106,7 @@ type bpfMaps struct {
 	TLS_DATA_PERF_OUTPUT  *ebpf.Map `ebpf:"TLS_DATA_PERF_OUTPUT"`
 	ActiveSslReadArgsMap  *ebpf.Map `ebpf:"active_ssl_read_args_map"`
 	ActiveSslWriteArgsMap *ebpf.Map `ebpf:"active_ssl_write_args_map"`
-	ReadTlsMapData        *ebpf.Map `ebpf:"read_tls_map_data"`
-	ReadTlsMapTimestamp   *ebpf.Map `ebpf:"read_tls_map_timestamp"`
-	TlsDataArray          *ebpf.Map `ebpf:"tls_data_array"`
-	WriteTlsMapData       *ebpf.Map `ebpf:"write_tls_map_data"`
-	WriteTlsMapTimestamp  *ebpf.Map `ebpf:"write_tls_map_timestamp"`
+	DataBufferHeap        *ebpf.Map `ebpf:"data_buffer_heap"`
 }
 
 func (m *bpfMaps) Close() error {
@@ -119,11 +114,7 @@ func (m *bpfMaps) Close() error {
 		m.TLS_DATA_PERF_OUTPUT,
 		m.ActiveSslReadArgsMap,
 		m.ActiveSslWriteArgsMap,
-		m.ReadTlsMapData,
-		m.ReadTlsMapTimestamp,
-		m.TlsDataArray,
-		m.WriteTlsMapData,
-		m.WriteTlsMapTimestamp,
+		m.DataBufferHeap,
 	)
 }
 

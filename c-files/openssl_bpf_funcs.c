@@ -5,14 +5,8 @@
 #include "vmlinux.h"
 #include "bpf_tracing.h"
 #include "tls_message.h"
-
-#define MAX_DATA_SIZE 1000
+#include "openssl_tracer_types.h"
 char _license[] SEC("license") = "GPL";
-//Struct for our tls message
-struct my_struct {
-    const char buf[MAX_DATA_SIZE];
-    size_t len;
-};
 
 //Declaring the perf submit event
 struct {
@@ -30,7 +24,7 @@ struct {
 struct{
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, __u64);
-    __type(value, struct my_struct);
+    __type(value, const char*);
     __uint(max_entries, 10000);
     __uint(map_flags, 0);
 } active_ssl_read_args_map SEC(".maps");
@@ -46,7 +40,7 @@ struct{
 struct{
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, __u64);
-    __type(value, struct my_struct);
+    __type(value, const char*);
     __uint(max_entries, 10000);
     __uint(map_flags, 0);
 } active_ssl_write_args_map SEC(".maps");
@@ -67,13 +61,13 @@ struct{
 //     .map_flags = 0,
 // };
 //Declare this using btf type format
-struct{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, __u64);
-    __type(value, const char *);
-    __uint(max_entries, 10000);
-    __uint(map_flags, 0);
-} read_tls_map_data SEC(".maps");
+// struct{
+//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __type(key, __u64);
+//     __type(value, const char *);
+//     __uint(max_entries, 10000);
+//     __uint(map_flags, 0);
+// } read_tls_map_data SEC(".maps");
 
 // struct bpf_map_def SEC("maps") read_tls_map_timestamp = {
 //     .type = BPF_MAP_TYPE_HASH,
@@ -83,13 +77,13 @@ struct{
 //     .map_flags = 0,
 // };
 //Declare this using btf type format
-struct{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, __u64);
-    __type(value, __u64);
-    __uint(max_entries, 10000);
-    __uint(map_flags, 0);
-} read_tls_map_timestamp SEC(".maps");
+// struct{
+//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __type(key, __u64);
+//     __type(value, __u64);
+//     __uint(max_entries, 10000);
+//     __uint(map_flags, 0);
+// } read_tls_map_timestamp SEC(".maps");
 
 // struct bpf_map_def SEC("maps") write_tls_map_data = {
 //     .type = BPF_MAP_TYPE_HASH,
@@ -99,13 +93,13 @@ struct{
 //     .map_flags = 0,
 // };
 //Declare this using btf type format
-struct{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, __u64);
-    __type(value, const char *);
-    __uint(max_entries, 10000);
-    __uint(map_flags, 0);
-} write_tls_map_data SEC(".maps");
+// struct{
+//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __type(key, __u64);
+//     __type(value, const char *);
+//     __uint(max_entries, 10000);
+//     __uint(map_flags, 0);
+// } write_tls_map_data SEC(".maps");
 
 // struct bpf_map_def SEC("maps") write_tls_map_timestamp = {
 //     .type = BPF_MAP_TYPE_HASH,
@@ -115,13 +109,13 @@ struct{
 //     .map_flags = 0,
 // };
 //Declare this using btf type format
-struct{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, __u64);
-    __type(value, __u64);
-    __uint(max_entries, 10000);
-    __uint(map_flags, 0);
-} write_tls_map_timestamp SEC(".maps");
+// struct{
+//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __type(key, __u64);
+//     __type(value, __u64);
+//     __uint(max_entries, 10000);
+//     __uint(map_flags, 0);
+// } write_tls_map_timestamp SEC(".maps");
 
 //Declare percpu array here
 // struct bpf_map_def SEC("maps") tls_data_array = {
@@ -134,50 +128,84 @@ struct{
 //Declare this using btf type format
 struct{
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __type(key, __u32);
-    __type(value, struct TLS_MESSAGE);
+    __type(key, struct ssl_data_event_t);
+    __type(value, 1);
     __uint(max_entries, 10000);
     __uint(map_flags, 0);
-} tls_data_array SEC(".maps");
+} data_buffer_heap SEC(".maps");
 
-//Output function. This is called from the uprobe
-static int output_tls_message(struct pt_regs* ctx, u32 bufferLen, u64 id, const char * buffer) {
-  u32 zeroPointer = 0;
-  //Lookup the TLS_MESSAGE struct in the percpu array
-  struct TLS_MESSAGE *tlsMessage = bpf_map_lookup_elem(&tls_data_array, &zeroPointer);
-  if (tlsMessage == NULL) {
+static __inline struct ssl_data_event_t* create_ssl_data_event(u64 current_pid_tgid) {
+  u32 kZero = 0;
+  struct ssl_data_event_t* event = bpf_map_lookup_elem(&data_buffer_heap, &kZero);
+  if (event == NULL) {
+    return NULL;
+  }
+  const u32 kMask32b = 0xffffffff;
+  event->timestamp_ns = bpf_ktime_get_ns();
+  event->pid = current_pid_tgid >> 32;
+  event->tid = current_pid_tgid & kMask32b;
+
+  return event;
+}
+
+static int process_SSL_data(struct pt_regs* ctx, u64 id, enum ssl_data_event_type type,
+                            const char* buf) {
+  int len = (int)PT_REGS_RC(ctx);
+  if (len < 0) {
     return 0;
   }
 
-  tlsMessage->ptid = id;
-  //Get the timestamp from the map
-  u64 *et = bpf_map_lookup_elem(&read_tls_map_timestamp, &id);
-  if (et == NULL) {
+  struct ssl_data_event_t* event = create_ssl_data_event(id);
+  if (event == NULL) {
     return 0;
   }
 
-  tlsMessage->elapsed = bpf_ktime_get_ns() - *et;
-
-  u32 outputBufferLen = MAX_DATA_SIZE;
-  if (bufferLen < MAX_DATA_SIZE) {
-    outputBufferLen = bufferLen;
-  }
-  bpf_probe_read(tlsMessage->message, outputBufferLen, buffer);
-
-  //Submit the event
-  bpf_perf_event_output(ctx, &TLS_DATA_PERF_OUTPUT, BPF_F_CURRENT_CPU, tlsMessage, sizeof(*tlsMessage));
-
-  //Clear the data from the map
-  bpf_map_delete_elem(&read_tls_map_data, &id);
-  bpf_map_delete_elem(&read_tls_map_timestamp, &id);
-
+  event->type = type;
+  // This is a max function, but it is written in such a way to keep older BPF verifiers happy.
+  event->data_len = (len < MAX_DATA_SIZE ? (len & (MAX_DATA_SIZE - 1)) : MAX_DATA_SIZE);
+  bpf_probe_read(event->data, event->data_len, buf);
+  bpf_perf_event_output(ctx, &TLS_DATA_PERF_OUTPUT, BPF_F_CURRENT_CPU, event, sizeof(*event));
   return 0;
 }
+
+//Output function. This is called from the uprobe
+// static int output_tls_message(struct pt_regs* ctx, u32 bufferLen, u64 id, const char * buffer) {
+//   u32 zeroPointer = 0;
+//   //Lookup the TLS_MESSAGE struct in the percpu array
+//   struct TLS_MESSAGE *tlsMessage = bpf_map_lookup_elem(&tls_data_array, &zeroPointer);
+//   if (tlsMessage == NULL) {
+//     return 0;
+//   }
+
+//   tlsMessage->ptid = id;
+//   //Get the timestamp from the map
+//   u64 *et = bpf_map_lookup_elem(&read_tls_map_timestamp, &id);
+//   if (et == NULL) {
+//     return 0;
+//   }
+
+//   tlsMessage->elapsed = bpf_ktime_get_ns() - *et;
+
+//   u32 outputBufferLen = MAX_DATA_SIZE;
+//   if (bufferLen < MAX_DATA_SIZE) {
+//     outputBufferLen = bufferLen;
+//   }
+//   bpf_probe_read(tlsMessage->message, outputBufferLen, buffer);
+
+//   //Submit the event
+//   bpf_perf_event_output(ctx, &TLS_DATA_PERF_OUTPUT, BPF_F_CURRENT_CPU, tlsMessage, sizeof(*tlsMessage));
+
+//   //Clear the data from the map
+//   bpf_map_delete_elem(&read_tls_map_data, &id);
+//   bpf_map_delete_elem(&read_tls_map_timestamp, &id);
+
+//   return 0;
+// }
 
 SEC("uprobe/ssl_write")
 int uprobe_entry_SSL_write(struct pt_regs* ctx) {
   u64 processThreadID = bpf_get_current_pid_tgid();
-  u64 ts = bpf_ktime_get_ns();
+  //Did not add pid here as it is not being used
   //Getting the address of the buffer
   struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
   if(__ctx == NULL) {
@@ -185,7 +213,7 @@ int uprobe_entry_SSL_write(struct pt_regs* ctx) {
   }
   //Access the percpu array for read_buf
   u32 zeroPointer = 0;
-  char *read_buf = bpf_map_lookup_elem(&tls_data_array, &zeroPointer);
+  char *read_buf = bpf_map_lookup_elem(&data_buffer_heap, &zeroPointer);
   if(read_buf == NULL) {
     return 0;
   }
@@ -195,32 +223,13 @@ int uprobe_entry_SSL_write(struct pt_regs* ctx) {
     return 0;
   }
   //Updating the buffer and the timestamp in the map
-  bpf_map_update_elem(&write_tls_map_data, &processThreadID, &read_buf, 0);
-  bpf_map_update_elem(&write_tls_map_timestamp, &processThreadID, &ts, 0);
+  bpf_map_update_elem(&active_ssl_write_args_map, &processThreadID, &read_buf, 0);
 
   return 0;
 }
-SEC("uretprobe/ssl_write")
-int uprobe_return_SSL_write(struct pt_regs* ctx) {
-  u64 processThreadID = bpf_get_current_pid_tgid();
-  //Looking up the buffer in the map
-  char** buffer = bpf_map_lookup_elem(&active_ssl_write_args_map, &processThreadID);
-  if (buffer != NULL) {
-    int len = (int)PT_REGS_RC(ctx);
-    if (len < 0) {
-      return 0;
-    }
-
-    output_tls_message(ctx, len, processThreadID, *buffer);
-  }
-
-  return 0;
-}
-//Attaching to the entry of the read function.
 SEC("uprobe/ssl_read")
 int uprobe_entry_SSL_read(struct pt_regs* ctx) {
   u64 processThreadID = bpf_get_current_pid_tgid();
-  u64 ts = bpf_ktime_get_ns();
    //Getting the address of the buffer
   struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
   if(__ctx == NULL) {
@@ -229,7 +238,7 @@ int uprobe_entry_SSL_read(struct pt_regs* ctx) {
 
 //Access the percpu array for read_buf
   u32 zeroPointer = 0;
-  char *read_buf = bpf_map_lookup_elem(&tls_data_array, &zeroPointer);
+  char *read_buf = bpf_map_lookup_elem(&data_buffer_heap, &zeroPointer);
   if(read_buf == NULL) {
     return 0;
   }
@@ -238,9 +247,20 @@ int uprobe_entry_SSL_read(struct pt_regs* ctx) {
     bpf_printk("Failed to read buffer\n");
     return 0;
   }
-  //update the tiumestamp and data
-  bpf_map_update_elem(&read_tls_map_timestamp, &processThreadID, &ts, 0);
-  bpf_map_update_elem(&read_tls_map_data, &processThreadID, &read_buf, 0);
+  //update the timestamp and data
+  bpf_map_update_elem(&active_ssl_read_args_map, &processThreadID, &read_buf, 0);
+  return 0;
+}
+
+SEC("uretprobe/ssl_write")
+int uprobe_return_SSL_write(struct pt_regs* ctx) {
+  u64 processThreadID = bpf_get_current_pid_tgid();
+  //Looking up the buffer in the map
+  char** buffer = bpf_map_lookup_elem(&active_ssl_write_args_map, &processThreadID);
+  if (buffer != NULL) {
+    process_SSL_data(ctx, processThreadID, kSSLWrite, *buffer);
+  }
+  bpf_map_delete_elem(&active_ssl_write_args_map, &processThreadID);
   return 0;
 }
 
@@ -249,13 +269,10 @@ SEC("uretprobe/ssl_read")
 int uprobe_return_SSL_read(struct pt_regs* ctx) {
   u64 processThreadID = bpf_get_current_pid_tgid();
   //Looking up the buffer in the map
-  const char** buffer = bpf_map_lookup_elem(&read_tls_map_data, &processThreadID);
+  const char** buffer = bpf_map_lookup_elem(&active_ssl_read_args_map, &processThreadID);
   if (buffer != NULL) {
-    int len = (int)PT_REGS_RC(ctx);
-    if (len < 0) {
-      return 0;
-    }
-    output_tls_message(ctx, len, processThreadID, *buffer);
+    process_SSL_data(ctx, processThreadID, kSSLWrite, *buffer);
   }
+  bpf_map_delete_elem(&active_ssl_read_args_map, &processThreadID);
   return 0;
 }
