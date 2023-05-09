@@ -22,7 +22,7 @@ const (
 	// dynamically-linked library, so the path of the library will need
 	// to be specified instead, e.g. /usr/lib/libreadline.so.8.
 	// Use `ldd /bin/bash` to find these paths.
-	binPath = "/usr/lib/x86_64-linux-gnu/libssl.so.3"
+	libsslPath = "/usr/lib/x86_64-linux-gnu/libssl.so.3"
 	read  = "SSL_read"
 	write = "SSL_write"
 )
@@ -46,30 +46,31 @@ func main() {
 	defer objs.Close()
 
 	//Open an ELF binary and read its es.
-	ex, err := link.OpenExecutable("/usr/lib/x86_64-linux-gnu/libssl.so.3")
+	ex, err := link.OpenExecutable(libsslPath)
 	if err != nil {
 		log.Fatalf("failed to open executable: %v", err)
 	}
-	upw, err := ex.Uprobe("SSL_write", objs.UprobeEntrySSL_write, nil)
+	upw, err := ex.Uprobe(write, objs.UprobeEntrySSL_write, nil)
 	if err != nil {
 		log.Fatalf("failed to open uprobe: %v", err)
 	}
 	defer upw.Close()
+
 	//Attach uretprobe to the SSL_write function.
-	urw, err := ex.Uretprobe("SSL_write", objs.UprobeReturnSSL_write, nil)
+	urw, err := ex.Uretprobe(write, objs.UprobeReturnSSL_write, nil)
 	if err != nil {
 		log.Fatalf("failed to open uretprobe: %v", err)
 	}
 	defer urw.Close()
 
 	//Attach the uprobe to the SSL_read function.
-	upr, err := ex.Uprobe("SSL_read", objs.UprobeEntrySSL_read, nil)
+	upr, err := ex.Uprobe(read, objs.UprobeEntrySSL_read, nil)
 	if err != nil {
 		log.Fatalf("failed to open uprobe: %v", err)
 	}
 	defer upr.Close()
 	//Attach uretprobe to the SSL_read function.
-	urr, err := ex.Uretprobe("SSL_read", objs.UprobeReturnSSL_read, nil)
+	urr, err := ex.Uretprobe(read, objs.UprobeReturnSSL_read, nil)
 	if err != nil {
 		log.Fatalf("failed to open uretprobe: %v", err)
 	}
@@ -77,7 +78,7 @@ func main() {
 
 	// Open a perf event reader from userspace on the PERF_EVENT_ARRAY map
 	// described in the eBPF C program.
-	rd, err := perf.NewReader(events, os.Getpagesize())
+	rd, err := perf.NewReader(objs.TLS_DATA_PERF_OUTPUT, os.Getpagesize())
 	if err != nil {
 		log.Fatalf("failed to create perf event reader: %v", err)
 	}
@@ -105,7 +106,7 @@ func main() {
 				log.Printf("reading from perf event reader: %s", err)
 				continue
 			}
-
+			log.Printf("perf event recorded")
 			if record.LostSamples != 0 {
 				log.Printf("perf event ring buffer full, dropped %d samples", record.LostSamples)
 				continue
@@ -115,6 +116,8 @@ func main() {
 				log.Printf("parsing perf event: %s", err)
 				continue
 			}
+			log.Printf("this is the event: %v", event)
 			// Print the data buffer contents.
+			
 		}
 }

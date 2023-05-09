@@ -138,7 +138,7 @@ struct
   __uint(max_entries, 1);
 } data_buffer_heap SEC(".maps");
 
-static __inline struct ssl_data_event_t *create_ssl_data_event(u64 current_pid_tgid)
+static __inline struct ssl_data_event_t *create_ssl_data_event(struct pt_regs *ctx ,u64 current_pid_tgid)
 {
   u32 kZero = 0;
   struct ssl_data_event_t *event = bpf_map_lookup_elem(&data_buffer_heap, &kZero);
@@ -150,7 +150,7 @@ static __inline struct ssl_data_event_t *create_ssl_data_event(u64 current_pid_t
   event->timestamp_ns = bpf_ktime_get_ns();
   event->pid = current_pid_tgid >> 32;
   event->tid = current_pid_tgid & kMask32b;
-
+  bpf_perf_event_output(NULL, &TLS_DATA_PERF_OUTPUT, BPF_F_CURRENT_CPU, event, sizeof(*event));
   return event;
 }
 
@@ -163,7 +163,7 @@ static int process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_typ
     return 0;
   }
 
-  struct ssl_data_event_t *event = create_ssl_data_event(id);
+  struct ssl_data_event_t *event = create_ssl_data_event(ctx, id);
   if (event == NULL)
   {
     return 0;
@@ -172,8 +172,8 @@ static int process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_typ
   event->type = type;
   // This is a max function, but it is written in such a way to keep older BPF verifiers happy.
   event->data_len = (len < MAX_DATA_SIZE ? (len & (MAX_DATA_SIZE - 1)) : MAX_DATA_SIZE);
-
-  bpf_probe_read(&event->data, sizeof(event->data_len), buf);
+  // asm volatile("%[len] &= 0x1fff;\n" ::[len] "+r"(len):);
+  // bpf_probe_read(&event->data, len & 0x1fff, buf);
   bpf_perf_event_output(ctx, &TLS_DATA_PERF_OUTPUT , BPF_F_CURRENT_CPU, event, sizeof(*event));
   return 0;
 }
@@ -212,7 +212,7 @@ static int process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_typ
 //   return 0;
 // }
 
-SEC("uprobe/ssl_write")
+SEC("uprobe/SSL_write")
 int uprobe_entry_SSL_write(struct pt_regs *ctx)
 {
   u64 processThreadID = bpf_get_current_pid_tgid();
@@ -274,7 +274,7 @@ int uprobe_entry_SSL_read(struct pt_regs *ctx)
   return 0;
 }
 
-SEC("uretprobe/ssl_write")
+SEC("uretprobe/SSL_write")
 int uprobe_return_SSL_write(struct pt_regs *ctx)
 {
   u64 processThreadID = bpf_get_current_pid_tgid();
