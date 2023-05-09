@@ -13,6 +13,15 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfSslDataEventT struct {
+	Type        uint32
+	TimestampNs int32
+	Pid         uint32
+	Tid         int32
+	Data        [8192]int8
+	DataLen     int32
+}
+
 // loadBpf returns the embedded CollectionSpec for bpf.
 func loadBpf() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_BpfBytes)
@@ -133,5 +142,6 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
+//
 //go:embed bpf_bpfel_x86.o
 var _BpfBytes []byte
