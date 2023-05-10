@@ -118,6 +118,6 @@ func main() {
 			}
 			log.Printf("this is the event: %v", event)
 			// Print the data buffer contents.
-			
+
 		}
 }

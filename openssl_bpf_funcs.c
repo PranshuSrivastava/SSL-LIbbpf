@@ -150,7 +150,6 @@ static __inline struct ssl_data_event_t *create_ssl_data_event(struct pt_regs *c
   event->timestamp_ns = bpf_ktime_get_ns();
   event->pid = current_pid_tgid >> 32;
   event->tid = current_pid_tgid & kMask32b;
-  bpf_perf_event_output(NULL, &TLS_DATA_PERF_OUTPUT, BPF_F_CURRENT_CPU, event, sizeof(*event));
   return event;
 }
 
@@ -164,6 +163,7 @@ static int process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_typ
   }
 
   struct ssl_data_event_t *event = create_ssl_data_event(ctx, id);
+  struct ssl_data_event_t event2 = {};
   if (event == NULL)
   {
     return 0;
@@ -172,8 +172,9 @@ static int process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_typ
   event->type = type;
   // This is a max function, but it is written in such a way to keep older BPF verifiers happy.
   event->data_len = (len < MAX_DATA_SIZE ? (len & (MAX_DATA_SIZE - 1)) : MAX_DATA_SIZE);
-  // asm volatile("%[len] &= 0x1fff;\n" ::[len] "+r"(len):);
-  // bpf_probe_read(&event->data, len & 0x1fff, buf);
+  event2.type = type;
+  asm volatile("%[len] &= 0x1fff;\n" ::[len] "+r"(len):);
+  bpf_probe_read(&event->data, len & 0x1fff, buf);
   bpf_perf_event_output(ctx, &TLS_DATA_PERF_OUTPUT , BPF_F_CURRENT_CPU, event, sizeof(*event));
   return 0;
 }
