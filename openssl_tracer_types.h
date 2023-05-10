@@ -24,9 +24,13 @@ enum ssl_data_event_type { kSSLRead, kSSLWrite };
 
 struct ssl_data_event_t {
   enum ssl_data_event_type type;
-  int timestamp_ns;
+  uint64_t timestamp_ns;
   uint32_t pid;
   int tid;
   char data[MAX_DATA_SIZE];
   int data_len;
+};
+
+struct ssl_data{
+  char *buf;
 };
