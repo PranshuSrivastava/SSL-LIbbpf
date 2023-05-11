@@ -15,7 +15,7 @@ import (
 	// "github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"golang.org/x/sys/unix"
+	// "golang.org/x/sys/unix"
 )
 
 const (
@@ -37,8 +37,8 @@ type bpfSslDataEventT struct {
 	TimestampNs uint64
 	Pid         uint32
 	Tid         int32
-	Data        [8192]byte
-	DataLen     int32
+	Data       	[8192]byte
+	DataLen     [2]uint32
 }
 
 
@@ -171,12 +171,12 @@ func main() {
 			log.Printf("Failed to decode received data: %+v", err)
 			continue
 		}
-		log.Printf("Event datalength:%v",event.DataLen)
+		log.Printf("Event datalength:%v",event.DataLen[1])
 		log.Printf("Event pid:%v",event.Pid)
 		log.Printf("Event tid:%v",event.Tid)
 		log.Printf("Event timestamp:%v",event.TimestampNs)
 		log.Printf("Event type:%v",event.Type)
-		log.Printf("Got the event: %v",unix.ByteSliceToString(event.Data[:]))
+		log.Printf("Got the event: %v", string(event.Data[:]))
 	}
 
 }

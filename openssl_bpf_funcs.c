@@ -148,8 +148,7 @@ struct
 
 static __inline struct ssl_data_event_t *create_ssl_data_event(struct pt_regs *ctx, u64 current_pid_tgid)
 {
-  u32 kZero = 0;
-  struct ssl_data_event_t *event = bpf_map_lookup_elem(&data_buffer_heap, &kZero);
+  struct ssl_data_event_t *event = bpf_ringbuf_reserve(&TLS_DATA_RINGBUF_OUPUT, sizeof(*event), 0);
   if (event == NULL)
   {
     return NULL;
@@ -189,12 +188,7 @@ static void process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_ty
 
   // asm volatile("%[len] &= 0x1fff;\n" ::[len] "+r"(len)
   //              :);
-  // bpf_probe_read(&event->data, len & 0x1fff, data->buf);
-  bpf_probe_read_kernel(&event->data, event->data_len, data->buf);
-
-  if (len > 0)
-  {
-
+  bpf_probe_read_str(event->data, event->data_len, data->buf);
     event->data_len = len;
 
     bpf_printk("Actual buffer:%s", data->buf);
@@ -205,8 +199,8 @@ static void process_SSL_data(struct pt_regs *ctx, u64 id, enum ssl_data_event_ty
     bpf_printk("event buffer:%s", event->data);
 
     // bpf_perf_event_output(ctx, &TLS_DATA_PERF_OUTPUT , BPF_F_CURRENT_CPU, event, sizeof(*event));
-    bpf_ringbuf_output(&TLS_DATA_RINGBUF_OUPUT, event, sizeof(*event), 0);
-  }
+    bpf_ringbuf_submit(event, 0);
+
 }
 
 // Output function. This is called from the uprobe
