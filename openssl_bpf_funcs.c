@@ -130,33 +130,6 @@ int uprobe_entry_SSL_read(struct pt_regs *ctx)
   return 0;
 }
 
-SEC("uprobe/SSL_write_ex")
-int uprobe_entry_SSL_write_ex(struct pt_regs *ctx)
-{
-  u64 processThreadID = bpf_get_current_pid_tgid();
-  char *user_space_buf = (char *)PT_REGS_PARM2(ctx);
-
-  struct ssl_data write_data = {};
-  write_data.buf = user_space_buf;
-  bpf_map_update_elem(&active_ssl_write_args_map, &processThreadID, &write_data, 0);
-
-  return 0;
-}
-
-SEC("uprobe/SSL_read_ex")
-int uprobe_entry_SSL_read_ex(struct pt_regs *ctx)
-{
-  bpf_printk("Inside uprobe_entry_SSL_read_ex");
-  u64 processThreadID = bpf_get_current_pid_tgid();
-  void *user_space_buf = (void *)PT_REGS_PARM2(ctx);
-
-  struct ssl_data read_data = {};
-  read_data.buf = user_space_buf;
-
-  bpf_map_update_elem(&active_ssl_read_args_map, &processThreadID, &read_data, 0);
-  return 0;
-}
-
 SEC("uretprobe/SSL_write")
 int uprobe_return_SSL_write(struct pt_regs *ctx)
 {
@@ -176,35 +149,6 @@ int uprobe_return_SSL_write(struct pt_regs *ctx)
 // Attach to the return of the read function.
 SEC("uretprobe/SSL_read")
 int uprobe_return_SSL_read(struct pt_regs *ctx)
-{
-  u64 processThreadID = bpf_get_current_pid_tgid();
-  // Looking up the buffer in the map
-  struct ssl_data *read_data = bpf_map_lookup_elem(&active_ssl_read_args_map, &processThreadID);
-  if (read_data != NULL)
-  {
-    process_SSL_data(ctx, processThreadID, kSSLRead, read_data);
-  }
-  bpf_map_delete_elem(&active_ssl_read_args_map, &processThreadID);
-  return 0;
-}
-
-SEC("uretprobe/SSL_write_ex")
-int uprobe_return_SSL_write_ex(struct pt_regs *ctx)
-{
-  u64 processThreadID = bpf_get_current_pid_tgid();
-
-  // Looking up the buffer in the map
-  struct ssl_data *write_data = bpf_map_lookup_elem(&active_ssl_write_args_map, &processThreadID);
-  if (write_data != NULL)
-  {
-    process_SSL_data(ctx, processThreadID, kSSLWrite, write_data);
-  }
-  bpf_map_delete_elem(&active_ssl_write_args_map, &processThreadID);
-  return 0;
-}
-
-SEC("uretprobe/SSL_read_ex")
-int uprobe_return_SSL_read_ex(struct pt_regs *ctx)
 {
   u64 processThreadID = bpf_get_current_pid_tgid();
   // Looking up the buffer in the map

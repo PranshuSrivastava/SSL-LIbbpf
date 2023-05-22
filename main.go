@@ -89,32 +89,6 @@ func main() {
 	}
 	defer urr.Close()
 
-	//Attach uprobe to SSL_read_ex function.
-	upre, err := ex.Uprobe(read, objs.UprobeEntrySSL_readEx, nil)
-	if err != nil {
-		log.Fatalf("failed to open uprobe: %v", err)
-	}
-	defer upre.Close()
-	//Attach uretprobe to SSL_read_ex function.
-	urre, err := ex.Uretprobe(read, objs.UprobeReturnSSL_read, nil)
-	if err != nil {
-		log.Fatalf("failed to open uretprobe: %v", err)
-	}
-	defer urre.Close()
-
-	//Attach uprobe to SSL_write_ex function.
-	upwe, err := ex.Uprobe(write, objs.UprobeEntrySSL_writeEx, nil)
-	if err != nil {
-		log.Fatalf("failed to open uprobe: %v", err)
-	}
-	defer upwe.Close()
-	//Attach uretprobe to SSL_write_ex function.
-	urwe, err := ex.Uretprobe(write, objs.UprobeReturnSSL_write, nil)
-	if err != nil {
-		log.Fatalf("failed to open uretprobe: %v", err)
-	}
-	defer urwe.Close()
-
 	// trying ring buffer to accept events
 	reader, err := ringbuf.NewReader(objs.TLS_DATA_RINGBUF_OUPUT)
 	if err != nil {
@@ -151,11 +125,11 @@ func main() {
 			log.Printf("Failed to decode received data: %+v", err)
 			continue
 		}
-		log.Printf("Event datalength:%v",event.DataLen[1])
-		log.Printf("Event pid:%v",event.Pid)
-		log.Printf("Event tid:%v",event.Tid)
-		log.Printf("Event timestamp:%v",event.TimestampNs)
-		log.Printf("Event type:%v",event.Type)
+		// log.Printf("Event datalength:%v",event.DataLen[1])
+		// log.Printf("Event pid:%v",event.Pid)
+		// log.Printf("Event tid:%v",event.Tid)
+		// log.Printf("Event timestamp:%v",event.TimestampNs)
+		// log.Printf("Event type:%v",event.Type)
 		log.Printf("Got the event: %v", string(event.Data[:]))
 	}
 

@@ -54,14 +54,10 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	UprobeEntrySSL_read     *ebpf.ProgramSpec `ebpf:"uprobe_entry_SSL_read"`
-	UprobeEntrySSL_readEx   *ebpf.ProgramSpec `ebpf:"uprobe_entry_SSL_read_ex"`
-	UprobeEntrySSL_write    *ebpf.ProgramSpec `ebpf:"uprobe_entry_SSL_write"`
-	UprobeEntrySSL_writeEx  *ebpf.ProgramSpec `ebpf:"uprobe_entry_SSL_write_ex"`
-	UprobeReturnSSL_read    *ebpf.ProgramSpec `ebpf:"uprobe_return_SSL_read"`
-	UprobeReturnSSL_readEx  *ebpf.ProgramSpec `ebpf:"uprobe_return_SSL_read_ex"`
-	UprobeReturnSSL_write   *ebpf.ProgramSpec `ebpf:"uprobe_return_SSL_write"`
-	UprobeReturnSSL_writeEx *ebpf.ProgramSpec `ebpf:"uprobe_return_SSL_write_ex"`
+	UprobeEntrySSL_read   *ebpf.ProgramSpec `ebpf:"uprobe_entry_SSL_read"`
+	UprobeEntrySSL_write  *ebpf.ProgramSpec `ebpf:"uprobe_entry_SSL_write"`
+	UprobeReturnSSL_read  *ebpf.ProgramSpec `ebpf:"uprobe_return_SSL_read"`
+	UprobeReturnSSL_write *ebpf.ProgramSpec `ebpf:"uprobe_return_SSL_write"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -112,26 +108,18 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	UprobeEntrySSL_read     *ebpf.Program `ebpf:"uprobe_entry_SSL_read"`
-	UprobeEntrySSL_readEx   *ebpf.Program `ebpf:"uprobe_entry_SSL_read_ex"`
-	UprobeEntrySSL_write    *ebpf.Program `ebpf:"uprobe_entry_SSL_write"`
-	UprobeEntrySSL_writeEx  *ebpf.Program `ebpf:"uprobe_entry_SSL_write_ex"`
-	UprobeReturnSSL_read    *ebpf.Program `ebpf:"uprobe_return_SSL_read"`
-	UprobeReturnSSL_readEx  *ebpf.Program `ebpf:"uprobe_return_SSL_read_ex"`
-	UprobeReturnSSL_write   *ebpf.Program `ebpf:"uprobe_return_SSL_write"`
-	UprobeReturnSSL_writeEx *ebpf.Program `ebpf:"uprobe_return_SSL_write_ex"`
+	UprobeEntrySSL_read   *ebpf.Program `ebpf:"uprobe_entry_SSL_read"`
+	UprobeEntrySSL_write  *ebpf.Program `ebpf:"uprobe_entry_SSL_write"`
+	UprobeReturnSSL_read  *ebpf.Program `ebpf:"uprobe_return_SSL_read"`
+	UprobeReturnSSL_write *ebpf.Program `ebpf:"uprobe_return_SSL_write"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.UprobeEntrySSL_read,
-		p.UprobeEntrySSL_readEx,
 		p.UprobeEntrySSL_write,
-		p.UprobeEntrySSL_writeEx,
 		p.UprobeReturnSSL_read,
-		p.UprobeReturnSSL_readEx,
 		p.UprobeReturnSSL_write,
-		p.UprobeReturnSSL_writeEx,
 	)
 }
 
