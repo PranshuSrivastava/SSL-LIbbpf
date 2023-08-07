@@ -217,27 +217,7 @@ SEC("uprobe/SSL_write")
 int uprobe_entry_SSL_write(struct pt_regs *ctx)
 {
   u64 processThreadID = bpf_get_current_pid_tgid();
-  // Did not add pid here as it is not being used
-  // Getting the address of the buffer
-  // struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
-  // if (__ctx == NULL)
-  // {
-  //   return 0;
-  // }
-  // // Access the percpu array for read_buf
-  // u32 zeroPointer = 0;
-  // char *read_buf = bpf_map_lookup_elem(&data_buffer_heap, &zeroPointer);
-  // if (read_buf == NULL)
-  // {
-  //   return 0;
-  // }
   char *user_space_buf = (char *)PT_REGS_PARM2(ctx);
-  // if (bpf_probe_read(read_buf, MAX_DATA_SIZE, user_space_buf) < 0)
-  // {
-  //   bpf_printk("Failed to read buffer\n");
-  //   return 0;
-  // }
-  // Updating the buffer and the timestamp in the map
   bpf_printk("This is the buffer in the write functio%s:\n", user_space_buf);
   bpf_map_update_elem(&active_ssl_write_args_map, &processThreadID, &user_space_buf, 0);
 
@@ -247,27 +227,6 @@ SEC("uprobe/SSL_read")
 int uprobe_entry_SSL_read(struct pt_regs *ctx)
 {
   u64 processThreadID = bpf_get_current_pid_tgid();
-  // Getting the address of the buffer
-//   struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
-//   if (__ctx == NULL)
-//   {
-//     return 0;
-//   }
-
-  // // Access the percpu array for read_buf
-  // u32 zeroPointer = 0;
-  // char *read_buf = bpf_map_lookup_elem(&data_buffer_heap, &zeroPointer);
-  // if (read_buf == NULL)
-  // {
-  //   return 0;
-  // }
-  // if (bpf_probe_read(read_buf, MAX_DATA_SIZE, user_space_buf) < 0)
-  // {
-  //   bpf_printk("Failed to read buffer\n");
-  //   return 0;
-  // }
-  // update the timestamp and data
-  // struct pt_regs *__ctx = (struct pt_regs *)PT_REGS_PARM1_CORE(ctx);
   void *user_space_buf = (void *)PT_REGS_PARM2(ctx);
     bpf_printk("The value of buf is: %s", user_space_buf);
 
